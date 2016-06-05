@@ -198,3 +198,7 @@ vif(fit3) # VIF Collinarity check
 vcov(fit) # covariance matrix for model parameters 
 influence(fit) # regression diagnostics
 ```
+
+
+## Project Code Located @
+https://github.com/smallwesley/regression_project
