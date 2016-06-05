@@ -1,0 +1,200 @@
+---
+title: "Statistical Anaylsis of Motor Trends Car Dataset"
+author: "By: Wesley Small (smallwesley) - Date: June 2016"
+geometry: margin=2cm
+always_allow_html: yes
+output: pdf_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+set.seed(1234)
+#chooseCRANmirror()
+#install.packages("plotly")
+library(plotly)
+library(plyr)
+library(car)
+library(MASS)
+#library(Hmisc)
+```
+## Executive Summary
+
+This report will examine the 1974 Motor Trends automobile dataset, and look specifically at the relationship between the fuel consumption, listed as "mpg", as compared with it's relationship between the numerous additional variables. There shall be emphasis on examining the Motor Trends MTCARS dataset to answer these specific queries:
+
+1. "Is an automatic car better for MPG than a manual car? Which is better overall."
+2. "Quantify the MPG difference between automatic vs manual transmissions.
+
+Utilizing linear regression modeling and multivariate anaylsis, we are able to say with a bit more certainty that manual cars have better overall millage than automatic transmission cars.  
+
+Initially, using only transmission as a predictor, were able to describe that manual cars received 7.24 more mile per gallon. With multivariate anaylsis (possibly confounded), we still see slight increase of mpg for manual vehicles over automatic cars. Finally, we generated a best fit model containing a subset of predictors (horsepower, weight and transmission), better explaining the variability in MPG statistics.  While not explaining the variable only 84%, we this bestfit model answered that manual cars recieved about 1.8 to 2.0 more MPG than automatic cars.
+
+## Exploratory Data Anaylsis
+
+```{r echo=TRUE, eval=TRUE}
+data(mtcars); dfData <- mtcars; 
+```
+`r knitr::kable(head(dfData[sample(nrow(dfData)),], 3), format = "markdown")`
+```{r echo=TRUE, eval=TRUE}
+dfData$am <- as.factor(ifelse(dfData$am == 1,"Manual", "Automatic"))
+dfData$vs <- as.factor(ifelse(dfData$vs == 1,"straight", "v-engine"))
+dfData$cyl <- as.factor(dfData$cyl); dfData$carb <- as.factor(dfData$carb); 
+names(dfData)[names(dfData)=="am"] <- "transmission"
+names(dfData)[names(dfData)=="wt"] <- "weight"
+```
+
+In FIGURE 2 (see appendix), we chart out a histogram of the MPG data alone.  We find that it is emprically normal in distribution.
+
+In FIGURE 3 (see appendix), we graph out boxplot using the formula (mpg ~ transmission).  We can with using only this variable to filter fuel consumption, we see the manual cars perform better than automatic cars.  
+
+#### Statistical Inference:
+Using hypothetical testing we'll define our criterial for a null hypothesis and the alternative.
+
+1. H~0~:  Avg.MPG(Automatic-Cars) == Avg.MPG(Manual)
+2. H~A~:  Avg.MPG(Automatic-Cars) != Avg.MPG(Manual)
+
+```{r include=FALSE, eval=TRUE}
+op <- options(stringsAsFactors=F) 
+getTTDF <- function (tanswer) {
+  df <- data.frame( tEstimate = character(0), 
+  tConfInt= character(0), tStatistic = character(0), 
+  tPStatistic = character(0),stringsAsFactors=FALSE)
+  rbind(df, c(paste(round(tanswer$estimate,3),collapse=" vs "), 
+     paste(round(tanswer$conf.int,2),collapse=" <=> "),
+     round(tanswer$statistic,3), round(tanswer$p.value,3))) -> df
+  colnames(df) <- 
+  c("Mean/T-Estimate", "Confidence Intervals","T-Statistic","P-Value")
+  df
+}
+```
+```{r echo=TRUE, eval=TRUE}
+myTee <- t.test(mpg ~ transmission, data = dfData, var.equals=FALSE, paired = FALSE)
+```
+`r knitr::kable(getTTDF(myTee))`
+
+From this T-TEST answer, we see a low p-value of `r myTee$p.value`. Thus,  we would reject the null hypothesis in favour of the alternative as stated above.  We can see given the means of each transmission type group that on average, manual transmission out perform automatic vehicles by `r round(myTee$estimate[2] - myTee$estimate[1],2)` miles/gallon.
+
+# Per Contra!
+
+We cannot summarily accept this mid-point conclusion. We know this vehicle dataset has a number of specific variables that may affect our MPG totals.  Given the variables such as weight, displacement, cylinders, horsepower, gear ratio, etc, there variables affect how the each engine type perform.  Given these addtional variables we must evaluate how they compare along side transmission type (automatic vs manual), to see if one is truly better than the other for mileage. We should be clear that including variables into model can increase standard errors within the regression modeling.  We also should make note that one of two or more variables may have strong relationships (highly correlated) to the other, which could skew our model if added.
+
+In FIGURE 4 (see appendix), we take an initial snaphot of correlation between all columns in the dataset.  We find that MPG is strongly correlated to Cylinders, Displacement and Weight.  Cylinders is closely associated to displayment engine block type (vs), appears that there is a deep set of colinearity in this content.  We shall the a producedual approach constructing a set of linear models utilizing the variables present us in the MTCARS dataset
+
+## Modeling (Linear Regression)
+
+##### A) BASE MODEL: SIMPLE LINEAR REGRESSION
+We'll look at the inital model, the relationship between MPG and TRANSMISSION, holding all other variables constant.
+```{r echo=TRUE, eval=TRUE}
+baseModelFit <- lm(mpg ~ transmission, dfData); 
+knitr::kable(summary(baseModelFit)$coef[c("(Intercept)","transmissionManual"),], format = "markdown")
+```
+
+The adjusted R^2 value is at `r summary(baseModelFit)$adj.r.squared` means only 34% of differences (or variability) in mileage (mpg) can be explained by the transmission type.  Hence, we should look into add more variables into our model to learn how strong one transmission type is over the other.
+
+##### B) ALL VARIABLES MODEL: MULTIVARIABLE LINEAR REGRESSION
+```{r echo=TRUE, eval=TRUE}
+allVariablesModelFit <- lm(mpg ~ ., dfData);
+```
+`r knitr::kable(summary(allVariablesModelFit)$coef[c("(Intercept)","transmissionManual"),], format = "markdown")`
+
+We see that the R^2 value `r summary(allVariablesModelFit)$adj.r.squared` provides insight that usage of more of the variables leads to a better explanation of the variability of the mileage.  The p-values for hp and weight are < 0.10 significant code, thus suggest there is evidence form the dataset sample, that there is an effect to mileage. We'll explore these variables alongside with transmission in a new model fit.
+
+
+
+##### C) BETTER MODEL FIT: MULTIVARIABLE REGRESSION
+In this 3rd model fit, only use 3 predictors: HorsePower Weight and Transmission(required).
+
+```{r echo=TRUE, eval=TRUE}
+betterModelFit <- lm(mpg ~ hp + weight + transmission, dfData); 
+```
+`r knitr::kable(summary(betterModelFit)$coef, format = "markdown")`
+
+We see that the R^2 value at`r round(summary(betterModelFit)$adj.r.squared * 100, 2)`% is much better.  The coeficient slope for transmissionManual indicates that manual cars get 2.08 more mpg than automatic cars, when we factor in weight and horsepower.
+
+##### D) STEP-WISE REGRESSION
+From further research on optimizing linear regression modeling step-wise regression offer a way to obtain a strong model. This method not an exact science or favoured approache, however it provides a sanity check on finding a better linear regression model fit. The Step-AIC method R coding example was reference to from this website: [http://www.statmethods.net/stats/regression.html].
+
+```{r echo=TRUE, eval=TRUE}
+stepwiseModelFit <- stepAIC(allVariablesModelFit, direction="both",trace=FALSE)
+```
+`r knitr::kable(summary(stepwiseModelFit)$coef, format = "markdown")`
+
+We see that the R^2 value at `r round(summary(stepwiseModelFit)$adj.r.squared * 100, 2)`%.  The coeficienct slope for transmissionManual indicates that manual cars get 1.81 more mpg than automatic cars, when we factor in weight and horsepower.
+
+## Concluding Remarks:
+
+We see that manual cars have better fuel consumption by about 2.0 more mpg than automatics.  This was obtained from the what we saw in the betterfit model and the stepwise model.
+
+```{r echo=FALSE, eval=TRUE, fig.height=1.5, fig.width=6}
+ggplot(dfData, aes(x=transmission, y=weight, fill=transmission)) + geom_boxplot() +
+    guides(fill=FALSE) + labs(title="Mileage in constrast by Transmission Type",
+         x="Transmission Type", y="Weight (1000 lbs") + coord_flip()
+```
+It appears fuel consumption has more to do with how well each engine performed given a certain weight, the horsepower + cylinders. As we see in the above plot, automatic cars are far heavier on average.  An assumption, is that automatic cars have heavier set of parts and have a heavier chasis, due to on average their are more luxury sedans, etc using this transmission type.  All this factors into how big an engine, how much horsepower  is required to moved said vehicles around, and effectively down to how much fuel is consumed.
+
+
+* * *
+
+# APPENDIX + FIGURES
+
+## FIGURE 1: About the MTCARS dataset
+
+*Description:* This dataset comprises fuel consumption and 10 aspects of automobile design and performance for 32 automobiles (1973–74 models).  The mtcars dataset is a date-frame with 32 observations on 11 variables:
+
+| # | Name | Description | | # | Name | Description |
+|---|----|----------------------|--|---|----|----------------------------------|
+| 1 | mpg  | Miles/(US) gallon     | | 7   | qsec | 1/4 mile time  |
+| 2 | cyl  | Number of cylinders   | | 8   | vs   | V/S (0=V-engine, 1=straight engine) |
+| 3 | disp | Displacement (cu.in.) | | 9   | am   | transmission |
+| 4 | hp   | Gross horsepower      | |     |      | (0 = automatic, 1 = manual) |
+| 5 | drat | Rear axle ratio       | | 10  | gear | Number of forward gears |
+| 6 | wt   | Weight (1000 lbs)     | | 11  | carb | Number of carburetors |
+
+### FIGURE 2: Visualize the normalized MPG data
+This histogram we have a histogram and density plot of MPG column from our dataset.  It appears to be Unimodal and symmetric, thus we can rely on our mean and standard deviation in our linear model calculations.
+
+```{r echo=FALSE, eval=TRUE, fig.height=2, fig.width=6}
+ggplot(data=dfData, aes(x=mpg)) + 
+geom_histogram( aes(y =..density..),  breaks=seq( min(dfData$mpg), 
+                max(dfData$mpg), by = 2), col="red", fill="green") + 
+  geom_density(col=2) + labs(title="Histogram/Density Plot for MILEAGE", x="MPG", y="Count")
+```
+
+### FIGURE 3: MPG vs. Transmission Type
+```{r echo=FALSE, eval=TRUE, fig.height=1.5, fig.width=6}
+ggplot(dfData, aes(x=transmission, y=mpg, fill=transmission)) + geom_boxplot() +
+    guides(fill=FALSE) + labs(title="Mileage in constrast by Transmission Type",
+         x="Transmission Type", y="Mileage (Mile Per Gallon)") + coord_flip()
+```
+
+### FIGURE 4: Corelation of variables
+Since our original data (mtcars) is numerically tidy, we can examine a snapshot of correlation matrix, which provides insight to some of the relationshop between the variables.
+
+```{r echo=TRUE, eval=TRUE}
+data(mtcars); cov_matrix <- cor(mtcars); knitr::kable(symnum(cov_matrix, show.max = NULL), format = "markdown")
+```
+
+### FIGURE 4: Residual Plots and Diagnostics
+Diagnostics are taken of the better fit line and see that their are not outliers in the date.  It appear normal.
+```{r echo=TRUE, eval=TRUE}
+fit <- lm(mpg ~ hp + weight + transmission, dfData)
+par(mfrow = c(2, 2))
+plot(fit)
+```
+
+### FIGURE 5: Additional tools and Diagnostics on models
+From the class slides, lectures and website resources such as: [http://www.statmethods.net/stats/rdiagnostics.html], we can take a set of diagnotics on the models.
+```{r echo=TRUE, eval=FALSE}
+fit1 <- lm(mpg ~ transmission, mtcars)
+fit2 <- lm(mpg ~ hp + weight + transmission, mtcars)
+fit3 <- lm(mpg ~ ., mtars)
+
+# !!!! DIAGNOSE OUT TURNED OFF DUE TO VERBOSITY !!!
+
+coefficients(fit) # model coefficients
+confint(fit, level=0.95) # CIs for model parameters 
+fitted(fit) # predicted values
+residuals(fit) # residuals
+anova(fit,fit2,fit3) # anova table 
+vif(fit3) # VIF Collinarity check
+vcov(fit) # covariance matrix for model parameters 
+influence(fit) # regression diagnostics
+```
